@@ -1,0 +1,80 @@
+package com.utn.ejercicio6.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/turnos")
+public class TurnoController {
+
+    // Lista en memoria para simular los turnos
+    // En una implementación real estaría en un TurnoRepository o TurnoStore
+    private List<Map<String, Object>> turnos = new ArrayList<>();
+    public TurnoController() {
+        // Turno de ejemplo con médico asignado
+        Map<String, Object> turno1 = new HashMap<>();
+        turno1.put("id", 1L);
+        turno1.put("paciente", "juan");
+        turno1.put("medico", "dra_garcia");
+        turno1.put("fecha", "2026-05-01");
+        turnos.add(turno1);
+        Map<String, Object> turno2 = new HashMap<>();
+        turno2.put("id", 2L);
+        turno2.put("paciente", "maria");
+        turno2.put("medico", "dr_lopez");
+        turno2.put("fecha", "2026-05-02");
+        turnos.add(turno2);
+    }
+    // ENDPOINT 4: GET /api/turnos → solo MEDICO y ADMIN
+    // La regla de rol está en el Filter Chain (SecurityConfig).
+    @GetMapping
+    public ResponseEntity<List<Map<String, Object>>> listarTurnos() {
+        return ResponseEntity.ok(turnos);
+    }
+    // ENDPOINT 5: POST /api/turnos → solo PACIENTE
+    // Authentication inyecta automáticamente el usuario autenticado.
+
+    @PostMapping
+    public ResponseEntity<Map<String, Object>> crearTurno(@RequestBody Map<String, Object> datosTurno, Authentication auth) {
+        Map<String, Object> turnoNuevo = new HashMap<>();
+        turnoNuevo.put("id", (long) (turnos.size() + 1));
+        turnoNuevo.put("paciente", auth.getName()); // Siempre es el usuario autenticado
+        turnoNuevo.put("medico", datosTurno.get("medico"));
+        turnoNuevo.put("fecha", datosTurno.get("fecha"));
+        turnos.add(turnoNuevo);
+        return ResponseEntity.status(201).body(turnoNuevo);
+    }
+
+    // ENDPOINT 6: DELETE /api/turnos/{id} → ADMIN o el MEDICO asignado al turno
+    //
+    // El Filter Chain ya verificó que el usuario es ADMIN o MEDICO.
+    // @PreAuthorize agrega la lógica fina: si es MEDICO, debe ser el asignado a este turno.
+
+            @DeleteMapping("/{id}")
+            @PreAuthorize("hasRole('ADMIN') or (hasRole('MEDICO') and @turnoSecurityService.esMedicoDelTurno(authentication, #id))")
+    public ResponseEntity<String> eliminarTurno(@PathVariable Long id, Authentication auth) {
+        // Buscar y eliminar el turno de la lista
+
+        Map<String, Object> turnoAEliminar = null;
+        for (Map<String, Object> t : turnos) {
+            Long turnoId = (Long) t.get("id");
+            if (turnoId.equals(id)) {
+                turnoAEliminar = t;
+                break;
+            }
+        }
+
+        if (turnoAEliminar == null) {
+            return ResponseEntity.status(404).body("Turno no encontrado");
+        }
+
+        turnos.remove(turnoAEliminar);
+        return ResponseEntity.noContent().build(); // 204
+    }
+}
